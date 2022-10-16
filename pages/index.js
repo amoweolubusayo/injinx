@@ -1,8 +1,74 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import styles from '../styles/Home.module.css'
+import Head from "next/head";
+import Image from "next/image";
+import styles from "../styles/Home.module.css";
+import { useState, useEffect } from "react";
+import Alert from "../components/Alert";
+
+import { DripsClient, SubgraphClient } from "drips-sdk";
+import { ContractReceipt, providers, ContractTransaction } from "ethers";
+import Web3Modal from "web3modal";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useSigner, useProvider, useAccount, useConnect } from "wagmi";
+import WalletConnectProvider from "@walletconnect/web3-provider/dist/umd/index.min";
 
 export default function Home() {
+  const [success, setSuccess] = useState(null);
+  const [message, setMessage] = useState(null);
+  const [loading, setLoading] = useState(null);
+  const [splits, setSplits] = useState([]);
+  const signer = useSigner();
+  const provider = useProvider();
+  const api =
+    "https://api.thegraph.com/subgraphs/name/gh0stwheel/drips-on-mumbai";
+  const dripsClient = new DripsClient(provider);
+  dripsClient.networkId = provider?.network.chainId;
+  dripsClient.signer = signer.data;
+  dripsClient.address = Promise.resolve(signer.data?.getAddress());
+  const { address, isConnected } = useAccount();
+  if (isConnected) {
+    dripsClient.connected;
+    //dripsClient.daiContract.address = dripsClient.address
+  }
+  console.log("network is", provider?.network.chainId);
+  console.log("provider is", provider);
+  console.log("signer is", signer.data);
+  console.log("signer address is", signer.data?.getAddress());
+  console.log("drip data is", dripsClient);
+  console.log("drip address is", dripsClient.address);
+  const subgraphClient = new SubgraphClient(api);
+  console.log("data is", new SubgraphClient(api));
+
+  const approveDAIContract = async () => {
+    let approvalTx = await dripsClient.approveDAIContract();
+    let approvalReceipt = await approvalTx.wait();
+    if (approvalReceipt) {
+      setLoading(true);
+      console.log("Awaiting result...");
+      setSuccess(true);
+      setLoading(false);
+      setMessage("DAI approved!");
+    } else {
+      setMessage("Sorry, DAI not approved");
+    }
+    console.log("result is ", approvalReceipt);
+  };
+
+  const getMySplitsDetails = async () => {
+    const splitsArray = await subgraphClient.getSplitsByReceiver(
+      // sender: dripsClient.address,
+      await dripsClient.address
+    );
+    return splitsArray;
+  };
+  useEffect(() => {
+    console.log("I'm showing", splits);
+    getMySplitsDetails()
+      .then((splits) => setSplits(splits))
+      .catch((error) => {
+        console.log("rejected");
+      });
+  });
+  console.log("I'm showing", splits);
   return (
     <div className={styles.container}>
       <Head>
@@ -13,57 +79,95 @@ export default function Home() {
 
       <main className={styles.main}>
         <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
+          Drips SDK <a href="https://nextjs.org"> NextJs Example!</a>
         </h1>
+        <ConnectButton />
 
         <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.js</code>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            onClick={approveDAIContract}
+          >
+            Approve DAI
+          </button>
         </p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 lg:grid-cols-4 xl:gap-x-8">
+          <div className="grid-cols-1 gap-4 sm:grid-cols-2"></div>
 
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
+          <div className="grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="border-gray-200 bg-white px-4 py-5 sm:px-6">
+              {splits.map((split) => (
+                <div
+                  key={split.sender}
+                  className="relative flex items-center space-x-3 rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 hover:border-gray-400"
+                >
+                  <div className="min-w-0 flex-1">
+                    <a href="#" className="focus:outline-none">
+                      <span className="absolute inset-0" aria-hidden="true" />
+                      <h3 className="text-lg font-medium leading-6 text-black">
+                        {" "}
+                        My Splits{" "}
+                      </h3>
+                      <p className="text-sm font-medium text-gray-900">
+                        Sender:
+                      </p>
+                      <p>{split.sender}</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        Split Percentage:
+                      </p>
+                      <p>{parseInt(split.weight) / 10000} %</p>
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/canary/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
+          <div className="grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="border-gray-200 bg-white px-4 py-5 sm:px-6">
+              {loading && (
+                <Alert
+                  alertType={"loading"}
+                  alertBody={"Please wait"}
+                  triggerAlert={true}
+                  color={"white"}
+                />
+              )}
+              {success && (
+                <Alert
+                  alertType={"success"}
+                  alertBody={message}
+                  triggerAlert={true}
+                  color={"palegreen"}
+                />
+              )}
+              {success === false && (
+                <Alert
+                  alertType={"failed"}
+                  alertBody={message}
+                  triggerAlert={true}
+                  color={"palevioletred"}
+                />
+              )}
+              <div
+                  className="relative flex items-center space-x-3 rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 hover:border-gray-400"
+                >
+               <div className="min-w-0 flex-1">
+                    <a href="#" className="focus:outline-none">
+                      <span className="absolute inset-0" aria-hidden="true" />
+              <h2 className="text-lg font-medium leading-6 text-black">Wallet/Network Details &rarr;</h2>
+              <p className="text-sm font-medium text-gray-900">My Address: </p>
+              <p>{address}</p>
+              <p className="text-sm font-medium text-gray-900">Network ID: </p>
+              <p>{provider?.network.chainId}</p>
+              </a>
+              </div>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
-
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <span className={styles.logo}>
-            <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>
-        </a>
-      </footer>
     </div>
-  )
+  );
 }
